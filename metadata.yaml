@@ -1,0 +1,11 @@
+name: astrbot_plugin_chat_history_context
+display_name: 白名单群持续聊天上下文
+desc: 持续记录指定群的全部消息，并在该群每轮 LLM 请求中自动加入最近聊天滑动窗口。
+short_desc: 每轮自动感知白名单群最近聊天
+version: 0.3.0
+author: Sirin
+repo: "https://github.com/chah-p7/astrbot_plugin_chat_history_context"
+astrbot_version: ">=4.24.2,<5"
+support_platforms:
+  - aiocqhttp
+  - qq_official

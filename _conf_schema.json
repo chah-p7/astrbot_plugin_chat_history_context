@@ -1,0 +1,92 @@
+{
+  "enabled": {
+    "description": "启用白名单群持续聊天上下文",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后记录白名单群消息，并在该群每轮 LLM 请求中自动注入最近聊天上下文。"
+  },
+  "listen_all_groups": {
+    "description": "监听全部群聊（不推荐）",
+    "type": "bool",
+    "default": false,
+    "hint": "关闭时只监听下方白名单。开启会记录该 AstrBot 能收到的所有群消息，请先确认群成员知情。"
+  },
+  "listen_groups": {
+    "description": "持续监听的群聊白名单",
+    "type": "text",
+    "default": "",
+    "hint": "每行或逗号分隔。支持群 ID、完整 UMO、platform:群ID；也可在目标群发送 /historywatch add。"
+  },
+  "continuous_context_enabled": {
+    "description": "白名单群每轮自动加入上下文",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后无需说“读取聊天记录”，白名单群每次调用模型都会带上最近的群聊滑动窗口。"
+  },
+  "continuous_context_hours": {
+    "description": "每轮自动上下文回溯小时数",
+    "type": "float",
+    "default": 2,
+    "hint": "默认最近 2 小时；支持小数，并受记录保留期限制。"
+  },
+  "continuous_max_messages": {
+    "description": "每轮自动上下文最多消息数",
+    "type": "int",
+    "default": 100,
+    "hint": "超过时优先保留较新的消息。"
+  },
+  "continuous_max_chars": {
+    "description": "每轮自动上下文最大字符数",
+    "type": "int",
+    "default": 20000,
+    "hint": "防止持续上下文占满模型输入；与显式读取记录的上限分开。"
+  },
+  "default_hours": {
+    "description": "未指定时间时默认回溯小时数",
+    "type": "float",
+    "default": 6,
+    "hint": "用户没有给出范围时使用；支持小数。"
+  },
+  "retention_days": {
+    "description": "聊天记录保留天数",
+    "type": "float",
+    "default": 14,
+    "hint": "超过此时间的记录会定期清理；用户要求更早范围时只能读取仍在保留期内的数据。"
+  },
+  "timezone": {
+    "description": "解析自然语言时间所用时区",
+    "type": "string",
+    "default": "Asia/Shanghai",
+    "hint": "使用 IANA 时区名称，例如 Asia/Shanghai。"
+  },
+  "max_message_chars": {
+    "description": "单条消息最多保存字符数",
+    "type": "int",
+    "default": 4000,
+    "hint": "超出部分会截断，最低 200。"
+  },
+  "max_injected_messages": {
+    "description": "显式读取记录时最多注入消息数",
+    "type": "int",
+    "default": 600,
+    "hint": "超出后优先保留较新的消息，并在上下文中标注省略数量。"
+  },
+  "max_injected_chars": {
+    "description": "显式读取记录时的最大字符数",
+    "type": "int",
+    "default": 100000,
+    "hint": "用于防止特别活跃的群聊挤满模型上下文。"
+  },
+  "include_self_messages": {
+    "description": "记录机器人自己发送的消息",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后会连同机器人在白名单群发送的消息一起保存，形成完整聊天记录。"
+  },
+  "extra_trigger_phrases": {
+    "description": "额外触发短语",
+    "type": "text",
+    "default": "",
+    "hint": "使用逗号或换行分隔。出现这些短语时会注入聊天记录。"
+  }
+}
