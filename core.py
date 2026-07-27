@@ -89,12 +89,33 @@ def parse_group_targets(raw: object) -> tuple[str, ...]:
     return tuple(result)
 
 
+def _selector_variants(value: object) -> set[str]:
+    """Expand stable group selectors, including legacy full UMO values."""
+    cleaned = str(value or "").strip().casefold()
+    if not cleaned:
+        return set()
+    variants = {cleaned}
+    parts = cleaned.split(":", 2)
+    if len(parts) == 3 and parts[0] and parts[2]:
+        platform, message_type, group_id = parts
+        if "group" in message_type:
+            variants.update(
+                {
+                    group_id,
+                    f"{platform}:{group_id}",
+                    f"{platform}/{group_id}",
+                }
+            )
+    return variants
+
+
 def group_is_monitored(
     *,
     group_id: str,
     umo: str,
     platform_names: Iterable[str] = (),
     targets: Iterable[str] = (),
+    extra_candidates: Iterable[str] = (),
     listen_all: bool = False,
 ) -> bool:
     """Match a group by bare group ID, full UMO, or platform/group notation."""
@@ -104,19 +125,21 @@ def group_is_monitored(
     if listen_all:
         return True
 
-    normalized_targets = {
-        str(target or "").strip().casefold()
-        for target in targets
-        if str(target or "").strip()
-    }
+    normalized_targets: set[str] = set()
+    for target in targets:
+        normalized_targets.update(_selector_variants(target))
     if not normalized_targets:
         return False
-    candidates = {clean_group.casefold(), str(umo or "").strip().casefold()}
+    candidates: set[str] = set()
+    candidates.update(_selector_variants(clean_group))
+    candidates.update(_selector_variants(umo))
     for platform in platform_names:
         clean_platform = str(platform or "").strip().casefold()
         if clean_platform:
             candidates.add(f"{clean_platform}:{clean_group.casefold()}")
             candidates.add(f"{clean_platform}/{clean_group.casefold()}")
+    for candidate in extra_candidates:
+        candidates.update(_selector_variants(candidate))
     candidates.discard("")
     return bool(candidates & normalized_targets)
 

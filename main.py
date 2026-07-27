@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import inspect
 import re
 import time
@@ -132,6 +133,31 @@ class ChatHistoryContextPlugin(Star):
     def _group_targets(self) -> tuple[str, ...]:
         return parse_group_targets(self.config.get("listen_groups", ""))
 
+    def _botmesh_history_scope(self, event: AstrMessageEvent) -> dict[str, object]:
+        """Read optional logical-group aliases without taking a hard dependency."""
+        try:
+            integration = importlib.import_module("astrbot_plugin_botmesh.integration")
+            method = getattr(integration, "get_chat_history_scope", None)
+            if not callable(method):
+                return {}
+            result = method(
+                umo=self._safe_text(event.unified_msg_origin),
+                event=event,
+            )
+            return dict(result) if isinstance(result, dict) else {}
+        except (ImportError, AttributeError):
+            return {}
+        except Exception as exc:
+            logger.debug("[聊天记录上下文] 读取 BotMesh 群映射失败: %s", exc)
+            return {}
+
+    @staticmethod
+    def _scope_selectors(scope: dict[str, object]) -> tuple[str, ...]:
+        raw = scope.get("selectors", ())
+        if not isinstance(raw, (list, tuple, set)):
+            return ()
+        return tuple(str(item or "").strip() for item in raw if str(item or "").strip())
+
     def _is_monitored_group(self, event: AstrMessageEvent) -> bool:
         platform_names: list[str] = []
         for getter_name in ("get_platform_id", "get_platform_name"):
@@ -144,13 +170,41 @@ class ChatHistoryContextPlugin(Star):
                 value = ""
             if value:
                 platform_names.append(value)
+        scope = self._botmesh_history_scope(event)
         return group_is_monitored(
             group_id=self._safe_text(event.get_group_id()),
             umo=self._safe_text(event.unified_msg_origin),
             platform_names=platform_names,
             targets=self._group_targets(),
+            extra_candidates=self._scope_selectors(scope),
             listen_all=bool(self.config.get("listen_all_groups", False)),
         )
+
+    async def _normalize_botmesh_content(
+        self,
+        event: AstrMessageEvent,
+        content: str,
+    ) -> str:
+        """Strip a verified BotMesh transport frame before persisting its body."""
+        try:
+            integration = importlib.import_module("astrbot_plugin_botmesh.integration")
+            method = getattr(integration, "normalize_chat_history_message", None)
+            if not callable(method):
+                return content
+            result = method(
+                umo=self._safe_text(event.unified_msg_origin),
+                content=content,
+                event=event,
+            )
+            if inspect.isawaitable(result):
+                result = await result
+            normalized = str(result or "").strip()
+            return normalized or content
+        except (ImportError, AttributeError):
+            return content
+        except Exception as exc:
+            logger.debug("[聊天记录上下文] 清理 BotMesh 展示帧失败: %s", exc)
+            return content
 
     async def _save_group_targets(self, targets: list[str]) -> None:
         self.config["listen_groups"] = "\n".join(targets)
@@ -251,7 +305,10 @@ class ChatHistoryContextPlugin(Star):
         if not event.get_group_id():
             yield event.plain_result("该命令只能在要监听的群聊中使用。")
             return
-        target = self._safe_text(event.unified_msg_origin)
+        scope = self._botmesh_history_scope(event)
+        target = self._safe_text(scope.get("selector")) or self._safe_text(
+            event.unified_msg_origin
+        )
         targets = list(self._group_targets())
         if target not in targets:
             targets.append(target)
@@ -280,12 +337,25 @@ class ChatHistoryContextPlugin(Star):
                     value = ""
                 if value:
                     platform_names.append(value)
+        scope = self._botmesh_history_scope(event)
         removable = {group_id, umo}
         for platform in platform_names:
             removable.update({f"{platform}:{group_id}", f"{platform}/{group_id}"})
+        removable.update(self._scope_selectors(scope))
+        selector = self._safe_text(scope.get("selector")).casefold()
+        if selector:
+            removable.add(selector)
         targets = [
-            target for target in self._group_targets()
-            if target.casefold() not in removable
+            target
+            for target in self._group_targets()
+            if not group_is_monitored(
+                group_id=group_id,
+                umo=umo,
+                platform_names=platform_names,
+                targets=(target,),
+                extra_candidates=removable,
+                listen_all=False,
+            )
         ]
         await self._save_group_targets(targets)
         still_all = bool(self.config.get("listen_all_groups", False))
@@ -294,7 +364,7 @@ class ChatHistoryContextPlugin(Star):
             + ("但“监听全部群”仍处于开启状态。" if still_all else "")
         )
 
-    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE, priority=-200)
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE, priority=200)
     async def capture_group_message(self, event: AstrMessageEvent) -> None:
         if not bool(self.config.get("enabled", True)):
             return
@@ -310,6 +380,7 @@ class ChatHistoryContextPlugin(Star):
         content = self._format_message(event)
         if not content:
             return
+        content = await self._normalize_botmesh_content(event, content)
 
         now_ts = time.time()
         message_id = self._safe_text(

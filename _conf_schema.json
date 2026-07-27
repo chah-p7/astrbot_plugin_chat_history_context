@@ -15,7 +15,7 @@
     "description": "持续监听的群聊白名单",
     "type": "text",
     "default": "",
-    "hint": "每行或逗号分隔。支持群 ID、完整 UMO、platform:群ID；也可在目标群发送 /historywatch add。"
+    "hint": "每行或逗号分隔。支持群 ID、完整 UMO、platform:群ID；也可在目标群发送 /historywatch add。与 BotMesh 同时使用时会自动保存并匹配逻辑群。"
   },
   "continuous_context_enabled": {
     "description": "白名单群每轮自动加入上下文",

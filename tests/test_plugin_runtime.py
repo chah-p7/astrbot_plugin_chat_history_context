@@ -13,7 +13,11 @@ class _Logger:
 
 
 def _decorator(*_args, **_kwargs):
-    return lambda function: function
+    def decorate(function):
+        function._filter_kwargs = dict(_kwargs)
+        return function
+
+    return decorate
 
 
 def _command_group(_name):
@@ -131,21 +135,32 @@ class _MessageObject:
 
 
 class _Event:
-    def __init__(self, *, group_id="100", umo="qq:group:100", text="大家好", message_id="m1"):
+    def __init__(
+        self,
+        *,
+        group_id="100",
+        umo="qq:group:100",
+        text="大家好",
+        message_id="m1",
+        platform_id="onebot_main",
+        platform_name="aiocqhttp",
+    ):
         self.unified_msg_origin = umo
         self.message_obj = _MessageObject(message_id)
         self._group_id = group_id
         self._text = text
+        self._platform_id = platform_id
+        self._platform_name = platform_name
         self._extra = {}
 
     def get_group_id(self):
         return self._group_id
 
     def get_platform_id(self):
-        return "onebot_main"
+        return self._platform_id
 
     def get_platform_name(self):
-        return "aiocqhttp"
+        return self._platform_name
 
     def get_sender_id(self):
         return "20001"
@@ -265,6 +280,88 @@ class PluginRuntimeTests(unittest.IsolatedAsyncioTestCase):
         await self.plugin.inject_history_on_request(request_event, req)
 
         self.assertEqual(req.extra_user_content_parts, [])
+
+    async def test_botmesh_logical_group_whitelists_every_bound_bot(self):
+        package_name = "astrbot_plugin_botmesh"
+        integration_name = f"{package_name}.integration"
+        previous_package = sys.modules.get(package_name)
+        previous_integration = sys.modules.get(integration_name)
+        package = types.ModuleType(package_name)
+        package.__path__ = []
+        integration = types.ModuleType(integration_name)
+
+        def get_scope(*, umo, event=None):
+            del umo, event
+            return {
+                "selector": "botmesh:main_group",
+                "logical_group_id": "main_group",
+                "selectors": [
+                    "botmesh:main_group",
+                    "A_GROUP",
+                    "B_GROUP",
+                    "onebot_main:GroupMessage:A_GROUP",
+                    "onebot_second:GroupMessage:B_GROUP",
+                ],
+            }
+
+        def normalize_message(*, umo, content, event=None):
+            del umo, content, event
+            return "已验证的 BotMesh 展示正文"
+
+        integration.get_chat_history_scope = get_scope
+        integration.normalize_chat_history_message = normalize_message
+        sys.modules[package_name] = package
+        sys.modules[integration_name] = integration
+
+        def restore_modules():
+            if previous_package is None:
+                sys.modules.pop(package_name, None)
+            else:
+                sys.modules[package_name] = previous_package
+            if previous_integration is None:
+                sys.modules.pop(integration_name, None)
+            else:
+                sys.modules[integration_name] = previous_integration
+
+        self.addCleanup(restore_modules)
+
+        add_event = _Event(
+            group_id="A_GROUP",
+            umo="onebot_main:GroupMessage:A_GROUP",
+            platform_id="onebot_main",
+        )
+        replies = [item async for item in self.plugin.historywatch_add(add_event)]
+        self.assertEqual(self.config["listen_groups"], "botmesh:main_group")
+        self.assertIn("botmesh:main_group", replies[0])
+
+        other_bot_event = _Event(
+            group_id="B_GROUP",
+            umo="onebot_second:GroupMessage:B_GROUP",
+            platform_id="onebot_second",
+            text="带有隐藏传输帧的正文",
+            message_id="mesh-1",
+        )
+        await self.plugin.capture_group_message(other_bot_event)
+        records = self.plugin.store.query(
+            umo=other_bot_event.unified_msg_origin,
+            start_ts=0,
+            end_ts=10**12,
+        )
+        self.assertEqual([record.content for record in records], ["已验证的 BotMesh 展示正文"])
+        self.config["listen_groups"] = (
+            "botmesh:main_group\nonebot_main:GroupMessage:A_GROUP"
+        )
+        _ = [
+            item
+            async for item in self.plugin.historywatch_remove(other_bot_event)
+        ]
+        self.assertEqual(self.config["listen_groups"], "")
+
+    def test_capture_runs_before_botmesh_can_stop_the_event(self):
+        priority = ChatHistoryContextPlugin.capture_group_message._filter_kwargs[
+            "priority"
+        ]
+        self.assertGreater(priority, 120)
 
 
 if __name__ == "__main__":

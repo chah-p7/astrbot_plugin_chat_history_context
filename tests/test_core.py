@@ -85,6 +85,31 @@ class TriggerTests(unittest.TestCase):
             )
         )
 
+    def test_full_umo_and_botmesh_aliases_match_the_same_logical_group(self):
+        self.assertTrue(
+            group_is_monitored(
+                group_id="B_GROUP",
+                umo="onebot_second:GroupMessage:B_GROUP",
+                platform_names=("onebot_second", "aiocqhttp"),
+                targets=("onebot_main:GroupMessage:A_GROUP",),
+                extra_candidates=(
+                    "botmesh:main_group",
+                    "A_GROUP",
+                    "B_GROUP",
+                    "onebot_main:A_GROUP",
+                    "onebot_second:B_GROUP",
+                ),
+            )
+        )
+        self.assertTrue(
+            group_is_monitored(
+                group_id="B_GROUP",
+                umo="onebot_second:GroupMessage:B_GROUP",
+                targets=("botmesh:main_group",),
+                extra_candidates=("botmesh:main_group",),
+            )
+        )
+
 
 class TimeScopeTests(unittest.TestCase):
     def test_default_six_hours(self):
