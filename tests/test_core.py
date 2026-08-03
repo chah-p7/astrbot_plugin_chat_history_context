@@ -152,6 +152,56 @@ class TimeScopeTests(unittest.TestCase):
 
 
 class StorageAndFormattingTests(unittest.TestCase):
+    def test_backfill_merges_cross_account_duplicates_and_sender_aliases(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = ChatHistoryStore(Path(directory) / "history.sqlite3")
+            store.append(
+                umo="onebot_rev:GroupMessage:11",
+                ts=100.0,
+                sender_id="rev-view-user",
+                sender_name="同一个人",
+                content="同一条群消息",
+                platform="onebot_rev",
+                group_id="11",
+                message_id="rev-m1",
+            )
+            store.append(
+                umo="onebot_tomo:GroupMessage:22",
+                ts=100.4,
+                sender_id="tomo-view-user",
+                sender_name="同一个人",
+                content="同一条群消息",
+                platform="onebot_tomo",
+                group_id="22",
+                message_id="tomo-m1",
+            )
+
+            changed = store.backfill_logical_group(
+                logical_group_id="botmesh:soul-swap",
+                umos=[
+                    "onebot_rev:GroupMessage:11",
+                    "onebot_tomo:GroupMessage:22",
+                ],
+            )
+            records = store.query_logical(
+                logical_group_id="botmesh:soul-swap",
+                start_ts=0,
+                end_ts=200,
+            )
+            aliases = store.aliases_for_group("botmesh:soul-swap")
+
+            self.assertEqual(changed, 2)
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0].content, "同一条群消息")
+            self.assertEqual(
+                {item["alias_id"] for item in aliases},
+                {"rev-view-user", "tomo-view-user"},
+            )
+            self.assertEqual(
+                len({item["canonical_sender_id"] for item in aliases}),
+                1,
+            )
+
     def test_store_query_dedupe_exclude_and_prune(self):
         with tempfile.TemporaryDirectory() as directory:
             store = ChatHistoryStore(Path(directory) / "history.sqlite3")
