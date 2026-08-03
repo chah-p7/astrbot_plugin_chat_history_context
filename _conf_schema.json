@@ -20,8 +20,8 @@
   "continuous_context_enabled": {
     "description": "白名单群每轮自动加入上下文",
     "type": "bool",
-    "default": true,
-    "hint": "开启后无需说“读取聊天记录”，白名单群每次调用模型都会带上最近的群聊滑动窗口。"
+    "default": false,
+    "hint": "推荐关闭并交由 BotMesh Memory 做结构化检索。开启后每次调用模型都会带上最近的原始群聊滑动窗口。"
   },
   "continuous_context_hours": {
     "description": "每轮自动上下文回溯小时数",
