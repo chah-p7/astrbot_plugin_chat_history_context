@@ -308,8 +308,18 @@ class PluginRuntimeTests(unittest.IsolatedAsyncioTestCase):
             del umo, content, event
             return "已验证的 BotMesh 展示正文"
 
+        def normalize_record(*, umo, content, event=None):
+            del umo, content, event
+            return {
+                "content": "已验证的 BotMesh 展示正文",
+                "sender_id": "10002",
+                "sender_name": "小B",
+                "source_bot_id": "bot_b",
+            }
+
         integration.get_chat_history_scope = get_scope
         integration.normalize_chat_history_message = normalize_message
+        integration.normalize_chat_history_record = normalize_record
         sys.modules[package_name] = package
         sys.modules[integration_name] = integration
 
@@ -348,6 +358,8 @@ class PluginRuntimeTests(unittest.IsolatedAsyncioTestCase):
             end_ts=10**12,
         )
         self.assertEqual([record.content for record in records], ["已验证的 BotMesh 展示正文"])
+        self.assertEqual(records[0].sender_id, "10002")
+        self.assertEqual(records[0].sender_name, "小B")
         self.config["listen_groups"] = (
             "botmesh:main_group\nonebot_main:GroupMessage:A_GROUP"
         )
